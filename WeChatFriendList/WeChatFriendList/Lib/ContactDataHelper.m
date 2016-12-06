@@ -1,9 +1,9 @@
 //
-//  ContactDataHelper.m
-//  WeChatContacts-demo
+//  ViewController.m
+//  WeChatFriendList
 //
-//  Created by shen_gh on 16/3/12.
-//  Copyright © 2016年 com.joinup(Beijing). All rights reserved.
+//  Created by 宇航 on 16/12/6.
+//  Copyright © 2016年 KH. All rights reserved.
 //
 
 #import "ContactDataHelper.h"

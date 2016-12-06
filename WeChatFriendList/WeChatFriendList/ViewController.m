@@ -11,19 +11,34 @@
 #import "MJExtension.h"
 #import "ContactDataHelper.h"
 #import "ContactTableViewCell.h"
-@interface ViewController ()<UITableViewDelegate,UITableViewDataSource>
+@interface ViewController ()<UITableViewDelegate,UITableViewDataSource,
+UISearchBarDelegate,UISearchDisplayDelegate>
 @property (nonatomic,strong) NSArray *rowArr;//row arr
 @property (nonatomic,strong) NSArray *sectionArr;//section arr
 @property (nonatomic,strong) UITableView *tableView;
 @property (nonatomic,strong) NSArray *json;
 @property (nonatomic,strong) UISearchBar *searchBar;//搜索框
 @property (nonatomic,strong) NSMutableArray *dataArr;
-//@property (nonatomic,strong) UISearchDisplayController *searchDisplayController;//搜索VC
+@property (nonatomic,strong) UISearchDisplayController *searchDisplayController;//搜索VC
+@property (nonatomic,strong) NSMutableArray * searchResultArr;//搜索结果Arr
 @end
 #define kScreenWidth [UIScreen mainScreen].bounds.size.width
 #define kScreenHeight [UIScreen mainScreen].bounds.size.height
 @implementation ViewController
 
+- (UISearchBar *)searchBar{
+    if (!_searchBar) {
+        _searchBar=[[UISearchBar alloc]initWithFrame:CGRectMake(0, 0, kScreenWidth, 44)];
+        [_searchBar setBackgroundImage:[UIImage imageNamed:@"ic_searchBar_bgImage"]];
+        [_searchBar sizeToFit];
+        [_searchBar setPlaceholder:@"搜索"];
+        [_searchBar.layer setBorderWidth:0.5];
+        [_searchBar.layer setBorderColor:[UIColor colorWithRed:229.0/255 green:229.0/255 blue:229.0/255 alpha:1].CGColor];
+        [_searchBar setDelegate:self];
+        [_searchBar setKeyboardType:UIKeyboardTypeDefault];
+    }
+    return _searchBar;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -35,6 +50,12 @@
     _sectionArr=[ContactDataHelper getFriendListSectionBy:[_rowArr mutableCopy]];
     NSLog(@"%@",_rowArr);
     NSLog(@"----%@----",_sectionArr);
+    
+    _searchDisplayController=[[UISearchDisplayController alloc]initWithSearchBar:self.searchBar contentsController:self];
+    [_searchDisplayController setDelegate:self];
+    [_searchDisplayController setSearchResultsDataSource:self];
+    [_searchDisplayController setSearchResultsDelegate:self];
+    _searchResultArr=[NSMutableArray array];
 }
 #pragma mark - setUpView
 - (void)setUpView{
@@ -80,19 +101,20 @@
 #pragma mark - UITableView delegate
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView{
     //section
+    if (tableView==_searchDisplayController.searchResultsTableView) {
+        return 1;
+    }else{
         return _rowArr.count;
-    
+    }
 }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
     //row
-
+    if (tableView==_searchDisplayController.searchResultsTableView) {
+        return _searchResultArr.count;
+    }else{
         return [_rowArr[section] count];
+    }
 }
-
-- (NSArray *)sectionIndexTitlesForTableView:(UITableView *)tableView{
-        return _sectionArr;
-}
-
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath{
     return 50.0;
 }
@@ -108,14 +130,22 @@
     [label setText:[NSString stringWithFormat:@"  %@",_sectionArr[section+1]]];
     return label;
 }
-
+- (NSArray *)sectionIndexTitlesForTableView:(UITableView *)tableView{
+    if (tableView!=_searchDisplayController.searchResultsTableView) {
+        return _sectionArr;
+    }else{
+        return nil;
+    }
+}
 - (NSInteger)tableView:(UITableView *)tableView sectionForSectionIndexTitle:(NSString *)title atIndex:(NSInteger)index{
     return index-1;
 }
 - (CGFloat) tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section{
-   
+    if (tableView==_searchDisplayController.searchResultsTableView) {
+        return 0;
+    }else{
         return 22.0;
-
+    }
 }
 
 #pragma mark - UITableView dataSource
@@ -127,14 +157,52 @@
     }
     [cell setSelectionStyle:UITableViewCellSelectionStyleNone];
     
+    if (tableView==_searchDisplayController.searchResultsTableView){
+        [cell.headImageView setImage:[UIImage imageNamed:[_searchResultArr[indexPath.row] valueForKey:@"avatar"]]];
+        [cell.nameLabel setText:[_searchResultArr[indexPath.row] valueForKey:@"fullName"]];
+    }else{
         ContactModel *model=_rowArr[indexPath.section][indexPath.row];
         [cell.headImageView setImage:[UIImage imageNamed:model.relatedDoctor.avatar]];
         [cell.nameLabel setText:model.relatedDoctor.fullName];
-  
+
+    }
+    
     
     return cell;
 }
+#pragma mark searchDisplayController delegate
+- (void)searchDisplayController:(UISearchDisplayController *)controller willShowSearchResultsTableView:(UITableView *)tableView{
+    //cell无数据时，不显示间隔线
+    UIView *v = [[UIView alloc] initWithFrame:CGRectZero];
+    [tableView setTableFooterView:v];
+}
+- (BOOL)searchDisplayController:(UISearchDisplayController *)controller shouldReloadTableForSearchString:(NSString *)searchString{
+    NSLog(@"%@",searchString);
+    NSLog(@"%@",[self.searchBar scopeButtonTitles][self.searchBar.selectedScopeButtonIndex]);
+    [self filterContentForSearchText:searchString scope:nil];
+    return YES;
+}
 
+#pragma mark - 源字符串内容是否包含或等于要搜索的字符串内容
+- (void)filterContentForSearchText:(NSString*)searchText scope:(NSString*)scope {
+    NSMutableArray *tempResults = [NSMutableArray array];
+    //不区分大小写比较  忽略 "-" 符号的比较
+    NSUInteger searchOptions = NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch;
+    for (int i; i<self.dataArr.count; i++) {
+        NSString *storeString = ((ContactModel *)self.dataArr[i]).relatedDoctor.fullName;
+         NSString *storeImageString=((ContactModel *)self.dataArr[i]).relatedDoctor.avatar?((ContactModel *)self.dataArr[i]).relatedDoctor.avatar:@"";
+        NSRange storeRange = NSMakeRange(0, storeString.length);
+        NSRange foundRange = [storeString rangeOfString:searchText options:searchOptions range:storeRange];
+        if (foundRange.length) {
+            NSDictionary *dic=@{@"fullName":storeString,@"avatar":storeImageString};
+            
+            [tempResults addObject:dic];
+        }
+    }
+    
+    [_searchResultArr removeAllObjects];
+    [_searchResultArr addObjectsFromArray:tempResults];
+}
 
 #pragma mark - dataArr(模拟从服务器获取到的数据)
 - (NSArray *)json{
